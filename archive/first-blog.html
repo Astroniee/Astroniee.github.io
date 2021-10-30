@@ -1,0 +1,42 @@
+<hr>
+<p>title: first blog<br>date: 2021-10-30 15:05:08<br>categories: mysql<br>tags: mysql</p>
+<hr>
+<p>不同的 MySQL 引擎中，count(*) 有不同的实现方式。</p>
+<ul>
+<li>MyISAM 引擎存储了表的总行数，在不加 where 筛选条件的情况下，所以count(*)会直接返回，效率比较高；</li>
+<li>InnoDB 执行 count(*) 的时候需要将数据一行一行地从引擎里读出来，然后累计计数</li>
+</ul>
+<p>为什么要使用InnoDB：</p>
+<p>InnoDB 支持事务，保证一致性</p>
+<p>InnoDB在执行 count(*) 时做了优化：会找最小的索引树进行遍历，尽量减少扫描的数据量（数据库系统设计的通用法则）。</p>
+<blockquote>
+<p>InnoDB 中表数据就是一个索引树，主键的索引树中叶子结点是数据，普通索引树中的叶子结点存的是主键值，因此普通索引树要比主键索引树小。对于 count(*) ，遍历哪棵树索引树得到的结果在逻辑上都是一样的，因此 MySQL 优化器会找到最小的索引树进行遍历，尽量减少扫描的数据量。 </p>
+</blockquote>
+<ul>
+<li><p>MyISAM 表虽然 count(<em>) 很快，但是不支持事务；</em></p>
+</li>
+<li><p>show table status 命令虽然返回很快，但是不准确；</p>
+</li>
+<li><p>InnoDB 表直接 count(*) 会遍历全表，虽然结果准确，但会导致性能问题。</p>
+</li>
+</ul>
+<p>业务需求：如果有一个页面需要经常显示交易系统的操作记录总数，应该怎么实现？</p>
+<ol>
+<li><p>缓存系统保存计数（会出现数据不一致的问题）</p>
+<p><img src="https://static001.geekbang.org/resource/image/39/33/39898af053695dad37227d71ae288e33.png" alt="img"></p>
+<p><img src="https://static001.geekbang.org/resource/image/5c/db/5c2f786beae1d8917cdc5033b7bf0bdb.png" alt="img"></p>
+</li>
+<li><p>数据库保存计数</p>
+<p><img src="https://static001.geekbang.org/resource/image/9e/e3/9e4170e2dfca3524eb5e92adb8647de3.png" alt="img"></p>
+</li>
+</ol>
+<p>所以，<strong>count(*)、count(主键 id) 和 count(1) 都表示返回满足条件的结果集的总行数；而 count(字段），则表示返回满足条件的数据行里面，参数“字段”不为 NULL 的总个数。</strong></p>
+<p>count(id) : <strong>InnoDB</strong> 引擎会便利整张表，<strong>把每一行的 id 取出来</strong>，返回给 Server 层。server 层拿到 id 后，判断不可能为空的，就按行累加；</p>
+<p>count(1) ：<strong>InnoDB</strong> 遍历整张表，<strong>不取值</strong>。server 层对于返回的每一行，放一个数字 “1” 进去，判断不可能为空的，按行累加</p>
+<p>count(字段)：</p>
+<ul>
+<li>如果字段定义为 not null，则逐行读取出这个字段，判断不能为 null，，按行累加</li>
+<li>如果该字段允许为 null，还是得把 字段取出来断一下，不是 null 蔡磊家</li>
+</ul>
+<p>count(*)：不取值，</p>
+<p>按照效率排序的话，count(字段)&lt;count(主键 id)&lt;count(1)≈count(*)，所以我建议你，尽量使用 count(*)。</p>
